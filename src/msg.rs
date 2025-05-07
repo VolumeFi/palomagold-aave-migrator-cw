@@ -1,10 +1,12 @@
 use cosmwasm_schema::{cw_serde, QueryResponses};
-use cosmwasm_std::{Binary, CustomMsg, Uint256};
+use cosmwasm_std::{Binary, CustomMsg, Uint128, Uint256};
 
 use crate::state::ChainSetting;
 
 #[cw_serde]
-pub struct InstantiateMsg {}
+pub struct InstantiateMsg {
+    pub palomagold_denom: String,
+}
 
 #[cw_serde]
 pub enum ExecuteMsg {
@@ -12,11 +14,16 @@ pub enum ExecuteMsg {
         chain_id: String,
         chain_setting: ChainSetting,
     },
+    SendPalomaGold {
+        chain_id: String,
+        recipient: String,
+        amount: Uint128,
+    },
     Release {
         chain_id: String,
         recipient: String,
         amount: Uint256,
-        nonce: String,
+        nonce: Uint256,
     },
 
     // Set Paloma address of a chain
@@ -45,11 +52,15 @@ pub enum ExecuteMsg {
     },
 }
 
-
 #[cw_serde]
 pub enum PalomaMsg {
     /// Message struct for cross-chain calls.
-    SchedulerMsg { execute_job: ExecuteJob },
+    SchedulerMsg {
+        execute_job: ExecuteJob,
+    },
+    SkywayMsg {
+        send_tx: SendTx,
+    },
 }
 
 #[cw_serde]
@@ -59,7 +70,24 @@ pub struct ExecuteJob {
 }
 
 #[cw_serde]
+pub struct SendTx {
+    pub remote_chain_destination_address: String,
+    pub amount: String,
+    pub chain_reference_id: String,
+}
+
+#[cw_serde]
 #[derive(QueryResponses)]
-pub enum QueryMsg {}
+pub enum QueryMsg {
+    #[returns(BalanceResponse)]
+    PalomagoldBalance {
+
+    }
+}
+
+#[cw_serde]
+pub struct BalanceResponse {
+    pub balance: Uint128,
+}
 
 impl CustomMsg for PalomaMsg {}

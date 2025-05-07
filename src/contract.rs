@@ -7,21 +7,20 @@ use crate::error::ContractError;
 use crate::msg::{ExecuteMsg, InstantiateMsg, PalomaMsg, QueryMsg};
 use crate::state::{State, STATE};
 
-
 // version info for migration info
 const CONTRACT_NAME: &str = "crates.io:palomagold-aave-migrator-cw";
 const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
-
 
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn instantiate(
     deps: DepsMut,
     _env: Env,
     info: MessageInfo,
-    _msg: InstantiateMsg,
+    msg: InstantiateMsg,
 ) -> Result<Response, ContractError> {
     let state = State {
         owner: info.sender.clone(),
+        palomagold_denom: msg.palomagold_denom,
     };
     set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
     STATE.save(deps.storage, &state)?;
@@ -39,12 +38,15 @@ pub fn execute(
     msg: ExecuteMsg,
 ) -> Result<Response<PalomaMsg>, ContractError> {
     match msg {
-        ExecuteMsg::RegisterChain { chain_id, chain_setting } => execute::register_chain(
-            deps,
-            info,
+        ExecuteMsg::RegisterChain {
             chain_id,
             chain_setting,
-        ),
+        } => execute::register_chain(deps, info, chain_id, chain_setting),
+        ExecuteMsg::SendPalomaGold {
+            chain_id,
+            recipient,
+            amount,
+        } => execute::send_paloma_gold(deps, info, chain_id, recipient, amount),
         ExecuteMsg::Release {
             chain_id,
             recipient,
@@ -63,12 +65,7 @@ pub fn execute(
         ExecuteMsg::UpdateServiceFeeCollector {
             chain_id,
             new_service_fee_collector,
-        } => execute::update_service_fee_collector(
-            deps,
-            info,
-            chain_id,
-            new_service_fee_collector,
-        ),
+        } => execute::update_service_fee_collector(deps, info, chain_id, new_service_fee_collector),
         ExecuteMsg::UpdateServiceFee {
             chain_id,
             new_service_fee,
@@ -77,13 +74,16 @@ pub fn execute(
 }
 
 pub mod execute {
+    use cosmwasm_std::{Coin, CosmosMsg, Uint128, Uint256};
+    use ethabi::{Address, Contract, Function, Param, ParamType, StateMutability, Token, Uint};
     use std::collections::BTreeMap;
     use std::str::FromStr;
-    use cosmwasm_std::{CosmosMsg, Uint256};
-    use ethabi::{Address, Contract, Function, Param, ParamType, StateMutability, Token, Uint};
 
     use super::*;
-    use crate::{msg::ExecuteJob, state::{ChainSetting, CHAIN_SETTINGS, WITHDRAW_TIMESTAMP}};
+    use crate::{
+        msg::{ExecuteJob, SendTx},
+        state::{ChainSetting, CHAIN_SETTINGS, WITHDRAW_TIMESTAMP},
+    };
 
     pub fn register_chain(
         deps: DepsMut,
@@ -101,6 +101,31 @@ pub mod execute {
             .add_attribute("chain_id", chain_id))
     }
 
+    pub fn send_paloma_gold(
+        deps: DepsMut,
+        info: MessageInfo,
+        chain_id: String,
+        recipient: String,
+        amount: Uint128,
+    ) -> Result<Response<PalomaMsg>, ContractError> {
+        // Implement the logic for sending Paloma Gold
+        let state = STATE.load(deps.storage)?;
+        assert!(info.sender == state.owner, "Unauthorized");
+        let coin_to_bridge: Coin = Coin {
+            denom: state.palomagold_denom.clone(),
+            amount,
+        };
+        Ok(Response::new()
+            .add_message(CosmosMsg::Custom(PalomaMsg::SkywayMsg {
+                send_tx: SendTx {
+                    remote_chain_destination_address: recipient.clone(),
+                    amount: coin_to_bridge.to_string(),
+                    chain_reference_id: chain_id.clone(),
+                },
+            }))
+            .add_attribute("action", "send_paloma_gold"))
+    }
+
     pub fn release(
         deps: DepsMut,
         env: Env,
@@ -108,13 +133,15 @@ pub mod execute {
         chain_id: String,
         recipient: String,
         amount: Uint256,
-        nonce: String,
+        nonce: Uint256,
     ) -> Result<Response<PalomaMsg>, ContractError> {
         // Implement the logic for releasing funds
         let state = STATE.load(deps.storage)?;
         assert!(info.sender == state.owner, "Unauthorized");
 
-        if let Some(timestamp) = WITHDRAW_TIMESTAMP.may_load(deps.storage, (chain_id.clone(), nonce.to_string()))? {
+        if let Some(timestamp) =
+            WITHDRAW_TIMESTAMP.may_load(deps.storage, (chain_id.clone(), nonce.to_string()))?
+        {
             if timestamp.plus_seconds(60).gt(&env.block.time) {
                 // If the timestamp is not older than 60 seconds, return an error
                 return Err(ContractError::Pending {});
@@ -123,7 +150,7 @@ pub mod execute {
 
         let recipient_address: Address = Address::from_str(recipient.as_str()).unwrap();
         let amount: Uint = Uint::from_big_endian(&amount.to_be_bytes());
-        let nonce: Uint = Uint::from_big_endian(&nonce.as_bytes());
+        let nonce: Uint = Uint::from_big_endian(&nonce.to_be_bytes());
         #[allow(deprecated)]
         let contract: Contract = Contract {
             constructor: None,
@@ -233,7 +260,8 @@ pub mod execute {
         info: MessageInfo,
         chain_id: String,
         new_refund_wallet: String,
-    ) -> Result<Response<PalomaMsg>, ContractError> {let state = STATE.load(deps.storage)?;
+    ) -> Result<Response<PalomaMsg>, ContractError> {
+        let state = STATE.load(deps.storage)?;
         assert!(state.owner == info.sender, "Unauthorized");
         let new_refund_wallet_address: Address =
             Address::from_str(new_refund_wallet.as_str()).unwrap();
@@ -281,46 +309,46 @@ pub mod execute {
         chain_id: String,
         new_gas_fee: Uint256,
     ) -> Result<Response<PalomaMsg>, ContractError> {
-// ACTION: Implement UpdateGasFee
-let state = STATE.load(deps.storage)?;
-assert!(info.sender == state.owner, "Unauthorized");
-let new_gas_fee: Uint = Uint::from_big_endian(&new_gas_fee.to_be_bytes());
-#[allow(deprecated)]
-let contract: Contract = Contract {
-    constructor: None,
-    functions: BTreeMap::from_iter(vec![(
-        "update_gas_fee".to_string(),
-        vec![Function {
-            name: "update_gas_fee".to_string(),
-            inputs: vec![Param {
-                name: "new_gas_fee".to_string(),
-                kind: ParamType::Uint(256),
-                internal_type: None,
-            }],
-            outputs: Vec::new(),
-            constant: None,
-            state_mutability: StateMutability::NonPayable,
-        }],
-    )]),
-    events: BTreeMap::new(),
-    errors: BTreeMap::new(),
-    receive: false,
-    fallback: false,
-};
-Ok(Response::new()
-    .add_message(CosmosMsg::Custom(PalomaMsg::SchedulerMsg {
-        execute_job: ExecuteJob {
-            job_id: CHAIN_SETTINGS.load(deps.storage, chain_id.clone())?.job_id,
-            payload: Binary::new(
-                contract
-                    .function("update_gas_fee")
-                    .unwrap()
-                    .encode_input(&[Token::Uint(new_gas_fee)])
-                    .unwrap(),
-            ),
-        },
-    }))
-    .add_attribute("action", "update_gas_fee"))
+        // ACTION: Implement UpdateGasFee
+        let state = STATE.load(deps.storage)?;
+        assert!(info.sender == state.owner, "Unauthorized");
+        let new_gas_fee: Uint = Uint::from_big_endian(&new_gas_fee.to_be_bytes());
+        #[allow(deprecated)]
+        let contract: Contract = Contract {
+            constructor: None,
+            functions: BTreeMap::from_iter(vec![(
+                "update_gas_fee".to_string(),
+                vec![Function {
+                    name: "update_gas_fee".to_string(),
+                    inputs: vec![Param {
+                        name: "new_gas_fee".to_string(),
+                        kind: ParamType::Uint(256),
+                        internal_type: None,
+                    }],
+                    outputs: Vec::new(),
+                    constant: None,
+                    state_mutability: StateMutability::NonPayable,
+                }],
+            )]),
+            events: BTreeMap::new(),
+            errors: BTreeMap::new(),
+            receive: false,
+            fallback: false,
+        };
+        Ok(Response::new()
+            .add_message(CosmosMsg::Custom(PalomaMsg::SchedulerMsg {
+                execute_job: ExecuteJob {
+                    job_id: CHAIN_SETTINGS.load(deps.storage, chain_id.clone())?.job_id,
+                    payload: Binary::new(
+                        contract
+                            .function("update_gas_fee")
+                            .unwrap()
+                            .encode_input(&[Token::Uint(new_gas_fee)])
+                            .unwrap(),
+                    ),
+                },
+            }))
+            .add_attribute("action", "update_gas_fee"))
     }
 
     pub fn update_service_fee_collector(
@@ -422,8 +450,25 @@ Ok(Response::new()
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
-pub fn query(_deps: Deps, _env: Env, _msg: QueryMsg) -> StdResult<Binary> {
-    unimplemented!()
+pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
+    match msg {
+        QueryMsg::PalomagoldBalance {} => query::palomagold_balance(deps, env),
+    }
+}
+
+pub mod query {
+    use cosmwasm_std::to_json_binary;
+
+    use super::*;
+    use crate::msg::BalanceResponse;
+
+    pub fn palomagold_balance(deps: Deps, env: Env) -> StdResult<Binary> {
+        to_json_binary(
+            &BalanceResponse {
+                balance: deps.querier.query_balance(env.contract.address, STATE.load(deps.storage)?.palomagold_denom)?.amount
+            },
+        )
+    }
 }
 
 #[cfg(test)]
