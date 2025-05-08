@@ -80,9 +80,7 @@ pub struct SendTx {
 #[derive(QueryResponses)]
 pub enum QueryMsg {
     #[returns(BalanceResponse)]
-    PalomagoldBalance {
-
-    }
+    PalomagoldBalance {},
 }
 
 #[cw_serde]

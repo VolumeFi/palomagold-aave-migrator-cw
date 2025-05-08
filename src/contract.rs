@@ -463,11 +463,15 @@ pub mod query {
     use crate::msg::BalanceResponse;
 
     pub fn palomagold_balance(deps: Deps, env: Env) -> StdResult<Binary> {
-        to_json_binary(
-            &BalanceResponse {
-                balance: deps.querier.query_balance(env.contract.address, STATE.load(deps.storage)?.palomagold_denom)?.amount
-            },
-        )
+        to_json_binary(&BalanceResponse {
+            balance: deps
+                .querier
+                .query_balance(
+                    env.contract.address,
+                    STATE.load(deps.storage)?.palomagold_denom,
+                )?
+                .amount,
+        })
     }
 }
 
