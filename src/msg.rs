@@ -9,6 +9,9 @@ pub struct InstantiateMsg {
 }
 
 #[cw_serde]
+pub struct MigrateMsg {}
+
+#[cw_serde]
 pub enum ExecuteMsg {
     RegisterChain {
         chain_id: String,
