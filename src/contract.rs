@@ -4,12 +4,20 @@ use cosmwasm_std::{Binary, Deps, DepsMut, Env, MessageInfo, Response, StdResult}
 use cw2::set_contract_version;
 
 use crate::error::ContractError;
-use crate::msg::{ExecuteMsg, InstantiateMsg, PalomaMsg, QueryMsg};
+use crate::msg::{ExecuteMsg, InstantiateMsg, MigrateMsg, PalomaMsg, QueryMsg};
 use crate::state::{State, STATE};
 
 // version info for migration info
 const CONTRACT_NAME: &str = "crates.io:palomagold-aave-migrator-cw";
 const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
+
+#[cfg_attr(not(feature = "library"), entry_point)]
+pub fn migrate(deps: DepsMut, _env: Env, _msg: MigrateMsg) -> Result<Response, ContractError> {
+    set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
+    Ok(Response::new()
+        .add_attribute("action", "migrate")
+        .add_attribute("version", CONTRACT_VERSION))
+}
 
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn instantiate(

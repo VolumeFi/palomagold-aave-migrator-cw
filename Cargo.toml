@@ -1,6 +1,6 @@
 [package]
 name = "palomagold-aave-migrator-cw"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["webelf101 <m63974529@gmail.com>"]
 edition = "2021"
 
