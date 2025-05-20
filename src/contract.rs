@@ -53,11 +53,7 @@ pub fn execute(
             amount,
             nonce,
         } => execute::release(deps, env, info, chain_id, recipient, amount, nonce),
-        ExecuteMsg::CancelTx { transaction_id } => execute::cancel_tx(
-            deps,
-            info,
-            transaction_id,
-        ),
+        ExecuteMsg::CancelTx { transaction_id } => execute::cancel_tx(deps, info, transaction_id),
         ExecuteMsg::SetPaloma { chain_id } => execute::set_paloma(deps, info, chain_id),
         ExecuteMsg::UpdateRefundWallet {
             chain_id,
