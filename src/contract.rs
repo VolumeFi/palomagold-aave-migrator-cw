@@ -53,6 +53,7 @@ pub fn execute(
             amount,
             nonce,
         } => execute::release(deps, env, info, chain_id, recipient, amount, nonce),
+        ExecuteMsg::CancelTx { transaction_id } => execute::cancel_tx(deps, info, transaction_id),
         ExecuteMsg::SetPaloma { chain_id } => execute::set_paloma(deps, info, chain_id),
         ExecuteMsg::UpdateRefundWallet {
             chain_id,
@@ -81,7 +82,7 @@ pub mod execute {
 
     use super::*;
     use crate::{
-        msg::{ExecuteJob, SendTx},
+        msg::{CancelTx, ExecuteJob, SendTx},
         state::{ChainSetting, CHAIN_SETTINGS, WITHDRAW_TIMESTAMP},
     };
 
@@ -117,11 +118,12 @@ pub mod execute {
         };
         Ok(Response::new()
             .add_message(CosmosMsg::Custom(PalomaMsg::SkywayMsg {
-                send_tx: SendTx {
+                send_tx: Some(SendTx {
                     remote_chain_destination_address: recipient.clone(),
                     amount: coin_to_bridge.to_string(),
                     chain_reference_id: chain_id.clone(),
-                },
+                }),
+                cancel_tx: None,
             }))
             .add_attribute("action", "send_paloma_gold"))
     }
@@ -210,6 +212,21 @@ pub mod execute {
                 },
             }))
             .add_attribute("action", "release"))
+    }
+
+    pub fn cancel_tx(
+        deps: DepsMut,
+        info: MessageInfo,
+        transaction_id: u64,
+    ) -> Result<Response<PalomaMsg>, ContractError> {
+        let state = STATE.load(deps.storage)?;
+        assert!(info.sender == state.owner, "Unauthorized");
+        Ok(Response::new()
+            .add_message(CosmosMsg::Custom(PalomaMsg::SkywayMsg {
+                send_tx: None,
+                cancel_tx: Some(CancelTx { transaction_id }),
+            }))
+            .add_attribute("action", "cancel_tx"))
     }
 
     pub fn set_paloma(

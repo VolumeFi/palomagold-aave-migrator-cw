@@ -25,7 +25,9 @@ pub enum ExecuteMsg {
         amount: Uint256,
         nonce: Uint256,
     },
-
+    CancelTx {
+        transaction_id: u64,
+    },
     // Set Paloma address of a chain
     SetPaloma {
         chain_id: String,
@@ -55,11 +57,10 @@ pub enum ExecuteMsg {
 #[cw_serde]
 pub enum PalomaMsg {
     /// Message struct for cross-chain calls.
-    SchedulerMsg {
-        execute_job: ExecuteJob,
-    },
+    SchedulerMsg { execute_job: ExecuteJob },
     SkywayMsg {
-        send_tx: SendTx,
+        send_tx: Option<SendTx>,
+        cancel_tx: Option<CancelTx>,
     },
 }
 
@@ -74,6 +75,11 @@ pub struct SendTx {
     pub remote_chain_destination_address: String,
     pub amount: String,
     pub chain_reference_id: String,
+}
+
+#[cw_serde]
+pub struct CancelTx {
+    pub transaction_id: u64,
 }
 
 #[cw_serde]
